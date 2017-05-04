@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from optparse import OptionParser
 import paho.mqtt.publish as publish
-import aqi
 import requests
 import sched
 import time
@@ -37,13 +36,14 @@ def parse_aqi_data(aqi_data):
     station_data = station_data.replace(' ','')
     station_name,station_zone = station_data.split(',')
     
-    sensor_data['station'] = { 'zone': station_zone, 'name': station_name }
-    sensor_data['time'] = aqi_data['time']['s']
-    sensor_data['measures'] = {}
+    sensor_data['station'] = station_zone + "-" + station_name
+    sensor_data['dateTime'] = aqi_data['time']['s']
+    sensor_data['dominentpol'] = aqi_data['dominentpol']
+    sensor_data['iaqi'] = {}
 
     for param in aqi_data['iaqi']:
 
-        sensor_data['measures'][param] = aqi_data['iaqi'][param]['v']
+        sensor_data['iaqi'][param] = aqi_data['iaqi'][param]['v']
 
     return sensor_data
 
@@ -56,20 +56,19 @@ def get_value(topic,forecast,hour,moment):
         return int(forecast.xpath("//"+topic+"[@periodo=\""+str(hour).zfill(2)+"\"]/text()")[moment])
 
 
-def get_aemet_data(locality,hour,moment):
+def get_aemet_data(locality,hour,moment,date):
 
     data = {}
 
     xml = requests.get("http://www.aemet.es/xml/municipios_h/localidad_h_"+str(locality)+".xml").content
     forecast = etree.XML(xml)
 
-    #data["DayName"] = datetime.datetime.now().strftime("%A")
-    data["Temperature"] = get_value("temperatura",forecast,hour,moment)
-    data["WindChill"] = get_value("sens_termica",forecast,hour,moment)
-    data["RH"] = get_value("humedad_relativa",forecast,hour,moment)
-    data["Rainfall"] = get_value("precipitacion",forecast,hour,moment)
-    data["WindDirection"] = get_value("direccion",forecast,hour,moment)
-    data["WindSpeed"] = int(get_value("velocidad",forecast,hour,moment))
+    data["temperature"] = get_value("temperatura",forecast,hour,moment)
+    data["windChill"] = get_value("sens_termica",forecast,hour,moment)
+    data["humidity"] = get_value("humedad_relativa",forecast,hour,moment)
+    data["rainfall"] = get_value("precipitacion",forecast,hour,moment)
+    data["windDirection"] = get_value("direccion",forecast,hour,moment)
+    data["windSpeed"] = int(get_value("velocidad",forecast,hour,moment))
 
     return data
 
@@ -79,7 +78,7 @@ def get_aemet_data(locality,hour,moment):
 
 if __name__ == '__main__':
 
-    print("AirQ Xtreme Sensor running... fasten your seatbelt!")
+    print('Starting "sensor"...')
 
     delay = 15*60 #seconds of delay
 
@@ -102,7 +101,7 @@ if __name__ == '__main__':
     
     ########################## MQTT Client config #######################
     
-    broker_address ="134.168.40.167"
+    broker_hostname ="mqtt"
 
 
     while True:
@@ -125,16 +124,18 @@ if __name__ == '__main__':
                 
                     data_date,data_time = aqi_data['time']['s'].split(' ')
                     hour,minutes,seconds = data_time.split(':')
+                    #year, month, day = data_date.split('-')
 
-                    sensor_data['aemet'] = get_aemet_data(locality,hour,moment)
+                    date = datetime.datetime.strptime( data_date, '%Y-%m-%d')
+
+                    sensor_data['dayName'] = date.strftime("%A")
+                    sensor_data['aemet'] = get_aemet_data(locality,hour,moment,date)
 
                     # Publish the message like a real sensor.
                     json_msg = json.dumps(sensor_data)
                     print(json_msg)
-                    print(hour)
-                    publish.single("sensor_data", json_msg, hostname=broker_address, keepalive=180)
+                    publish.single("sensor_data", json_msg, hostname=broker_hostname, keepalive=180)
                 
-
         time.sleep(delay)
             
 
