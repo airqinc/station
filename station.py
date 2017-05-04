@@ -12,8 +12,10 @@ from lxml import etree
 
 def get_aqi_data(aqi_url):
     
-    response = requests.get(aqi_url)
-
+    try:
+        response = requests.get(aqi_url)
+    except: return "error"
+    
     if response.status_code == 200:
         json_data = json.loads(response.text)
 
@@ -60,8 +62,10 @@ def get_aemet_data(locality,hour,moment,date):
 
     data = {}
 
-    xml = requests.get("http://www.aemet.es/xml/municipios_h/localidad_h_"+str(locality)+".xml").content
-    forecast = etree.XML(xml)
+    try:
+        xml = requests.get("http://www.aemet.es/xml/municipios_h/localidad_h_"+str(locality)+".xml").content
+        forecast = etree.XML(xml)
+    except: return "error"
 
     data["temperature"] = get_value("temperatura",forecast,hour,moment)
     data["windChill"] = get_value("sens_termica",forecast,hour,moment)
@@ -101,8 +105,8 @@ if __name__ == '__main__':
     
     ########################## MQTT Client config #######################
     
-    broker_hostname ="mqtt"
-
+    broker_hostname = "mqtt"
+    server_hostame = "server"
 
     while True:
 
@@ -135,7 +139,8 @@ if __name__ == '__main__':
                     json_msg = json.dumps(sensor_data)
                     print(json_msg)
                     publish.single("sensor_data", json_msg, hostname=broker_hostname, keepalive=180)
-                
+                    requests.post(server_hostame, data=json_msg)
+
         time.sleep(delay)
             
 
